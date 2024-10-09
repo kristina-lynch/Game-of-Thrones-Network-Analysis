@@ -1,0 +1,217 @@
+---
+title: "Untitled"
+author: "Jay"
+date: "2024-04-25"
+output: html_document
+---
+
+```{r}
+library(ergm)
+library(dplyr)
+library(magrittr)
+library(ggraph)
+library(sna)
+library(igraph)
+library(intergraph)
+library(network)
+library(ggplot2)
+library(ggrepel)
+```
+
+
+Load in the 5 files
+```{r}
+# load in the files
+got1 <- read.csv("~/Downloads/updated_book1.csv")
+
+# remove any rows where Source.Family or Target.Family is "Unknown"
+got1 <- got1[got1$Source.Family != "Unknown",]
+got1 <- got1[got1$Target.Family != "Unknown",]
+
+# create an undirected network object
+got1.net <- graph_from_data_frame(got1, directed = F)
+# un_net <- graph_from_data_frame(edges, directed = F, vertices = nodes)
+
+is.simple(got1.net)
+
+got2 <- read.csv("~/Downloads/updated_book2.csv", header = TRUE)
+got2.net <- graph_from_data_frame(got2, directed = F)
+is.simple(got2.net)
+
+got3 <- read.csv("~/Downloads/updated_book3.csv", header = TRUE)
+got3.net <- graph_from_data_frame(got3, directed = F)
+is.simple(got3.net)
+
+got4 <- read.csv("~/Downloads/updated_book4.csv", header = TRUE)
+got4.net <- graph_from_data_frame(got4, directed = F)
+is.simple(got4.net)
+
+got5 <- read.csv("~/Downloads/updated_book5.csv", header = TRUE)
+got5.net <- graph_from_data_frame(got5, directed = F)
+is.simple(got5.net)
+```
+
+
+Kristina graph
+```{r}
+# Define the allowed family names
+allowed_names <-
+  c("Targaryen",
+    "Stark",
+    "Greyjoy",
+    "Tully",
+    "Lannister",
+    "Baratheon",
+    "Arryn",
+    "Tyrell")
+
+# Filter the dataframe to only include rows where source.family or target.family is in the allowed_names list
+filtered_got1 <- got1 %>%
+  filter(Source.Family %in% allowed_names,
+         Target.Family %in% allowed_names)
+
+# create an undirected network object
+got1.net <- graph_from_data_frame(filtered_got1, directed = F)
+# un_net <- graph_from_data_frame(edges, directed = F, vertices = nodes)
+
+is.simple(got1.net)
+
+ggraph(got1.net, layout = "stress") +
+  geom_edge_link() +
+  geom_node_point() +
+  ggnetwork::theme_blank()
+
+family_colors <-
+  c(
+    "Stark" = "azure2",
+    "Lannister" = "red",
+    "Baratheon" = "yellow",
+    "Tully" = "maroon",
+    "Targaryen" = "black",
+    "Greyjoy" = "deepskyblue3",
+    "Arryn" = "blue",
+    "Tyrell" = "darkgreen"
+  )
+
+# Assign colors and labels to nodes
+V(got1.net)$color <- sapply(V(got1.net)$name, function(node_name) {
+  source_family <- got1$Source.Family[got1$Source == node_name][1]
+  if (source_family %in% names(family_colors)) {
+    return(family_colors[source_family])
+  } else {
+    return("grey")  # Default color for families not in the top 5
+  }
+})
+V(got1.net)$group <-
+  got1$Source.Family[match(V(got1.net)$name, got1$Source)]
+V(got1.net)$label <- V(got1.net)$name
+
+# Layout emphasizing group clustering
+layout <- create_layout(got1.net, layout = "with_fr")
+
+# Visualize the network
+g <- ggraph(graph = got1.net, layout = "stress") +
+  geom_edge_link(aes(edge_alpha = 0.5),
+                 show.legend = FALSE,
+                 color = "gray50") +
+  geom_node_point(
+    aes(fill = color),
+    shape = 21,
+    size = 5,
+    stroke = 2,
+    color = "white"
+  ) +
+  geom_node_text(
+    aes(label = label),
+    repel = TRUE,
+    color = "black",
+    fontface = "bold",
+    family = "sans",
+    size = 3,
+    check_overlap = TRUE,
+    segment.color = 'grey50'
+  ) +
+  scale_fill_identity() +
+  theme_void() +
+  labs(title = "Network of Game of Thrones Characters by Family")
+
+print(g)
+```
+
+Visualizations for Each Book
+```{r}
+# Load data for each book
+got_files <- list(
+  "updated_book1.csv",
+  "updated_book2.csv",
+  "updated_book3.csv",
+  "updated_book4.csv",
+  "updated_book5.csv"
+)
+books_data <- lapply(got_files, read.csv, header = TRUE)
+
+# Define allowed family names
+allowed_names <- c(
+  "Targaryen", "Stark", "Greyjoy", "Tully", "Lannister", 
+  "Baratheon", "Arryn", "Tyrell"
+)
+
+# Define family colors
+family_colors <- c(
+  "Stark" = "azure2", "Lannister" = "red", "Baratheon" = "yellow",
+  "Tully" = "maroon", "Targaryen" = "black", "Greyjoy" = "deepskyblue3",
+  "Arryn" = "blue", "Tyrell" = "darkgreen"
+)
+
+# Process each book data and visualize
+plots <- Map(function(got, file_name) {
+  # Remove rows with "Unknown" in family
+  got <- got[got$Source.Family != "Unknown" & got$Target.Family != "Unknown", ]
+  
+  # Filter for allowed families
+  got <- got[got$Source.Family %in% allowed_names & got$Target.Family %in% allowed_names, ]
+  
+  # Create network object
+  got.net <- graph_from_data_frame(got, directed = FALSE)
+  
+  # Assign colors and labels to nodes
+  V(got.net)$color <- sapply(V(got.net)$name, function(node_name) {
+    source_family <- got$Source.Family[got$Source == node_name][1]
+    ifelse(source_family %in% names(family_colors), family_colors[source_family], "grey")
+  })
+  V(got.net)$label <- V(got.net)$name
+  
+  # Visualize the network
+  g <- ggraph(got.net, layout = "stress") +
+    geom_edge_link(aes(edge_alpha = 0.5), show.legend = FALSE, color = "gray50") +
+    geom_node_point(
+      aes(fill = color),
+      shape = 21,
+      size = 5,
+      stroke = 2,
+      color = "white"
+    ) +
+    geom_node_text(
+      aes(label = label),
+      repel = TRUE,
+      color = "black",
+      fontface = "bold",
+      family = "sans",
+      size = 3,
+      check_overlap = TRUE,
+      segment.color = 'grey50'
+    ) +
+    scale_fill_identity() +
+    theme_void() +
+    labs(title = sprintf(
+      "Network of Game of Thrones Characters by Family for %s",
+      basename(file_name)
+    ))
+  
+  return(g)
+}, books_data, got_files)
+
+# Print plots for each book
+invisible(lapply(plots, print))
+```
+
